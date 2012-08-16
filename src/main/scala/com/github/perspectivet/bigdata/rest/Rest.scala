@@ -13,7 +13,10 @@ import org.scardf.jena.JenaGraph
 case class Head(val vars:List[String])
 case class Result(val `type`:String, val datatype:Option[String], val value:String)
 case class Bindings(val bindings:List[Map[String,Result]])
-case class ResultSet(val head:Head, val results:Bindings)
+case class ResultSet(val head:Head, val results:Bindings) {
+  def columnNames = head.vars
+  def columns = results.bindings
+}
 
 class Rest(val restUrl:String) {
   val log = Logger(classOf[Rest])
@@ -29,13 +32,13 @@ class Rest(val restUrl:String) {
   }
   """
 
-  def sparql(query:String) = {
+  def sparql(query:String):ResultSet = {
     log.debug("executing query:" + query)
 
     val result = http(sparqlUrl <:< Map("Accept" -> "application/sparql-results+json") <<? Map("query" -> query)  as_str)
     
     log.debug("query result:" + result)
-    result
+    Json.parse[ResultSet](result)
   }
 
   def putGraph(prefixList:List[String],g:Graph):String = {

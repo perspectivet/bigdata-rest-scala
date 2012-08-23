@@ -62,6 +62,20 @@ class Rest(val restUrl:String) {
     result
   }
 
+  def getDocument(subj:String):Document = {
+      val rest = new Rest("http://localhost:8080/bigdata/sparql")
+      val query = """
+      SELECT ?p ?o WHERE { %s ?p ?o }
+      """
+
+      val results = rest.sparql(query format subj)
+      new Document(subj,results)
+  }
+
+  def updateDocument(doc:Document, properties:Map[String,String]):Document = {
+    new (doc.subject,properties)
+  }
+
   def shutdown = {
     http.shutdown
   }

@@ -25,14 +25,14 @@ class RestSpec extends Specification {
     }
 */
 
-/*
     "insert an rdf file" in {
-      val rdfFile = "locations.rdf"
+      val rdfFile = "src/test/resources/locations.rdf"
       val results = rest.putFile(rdfFile,RDFFormat.RDFXML)
       println("results:" + results)
        success
     }
 
+/*
    "execute a sparql query" in {
       val query = """
       SELECT ?s ?p ?o WHERE { ?s ?p ?o }

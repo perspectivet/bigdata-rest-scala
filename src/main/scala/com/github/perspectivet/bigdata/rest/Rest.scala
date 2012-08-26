@@ -4,79 +4,149 @@ import com.codahale.jerkson._
 import dispatch._
 import grizzled.slf4j.Logger
 
-import java.io.{CharArrayReader, CharArrayWriter, FileReader, StringReader}
+import scala.collection.JavaConverters._
+
+//imported to use the Callable below to folow the bigdata example.
+//better ways exist in scala
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.{List => JList,LinkedList => JLinkedList}
+
+import java.io.{CharArrayReader, CharArrayWriter, StringReader}
+import java.io.{File,FileReader}
 import java.net.URLEncoder
 
-import org.scardf._
-import org.scardf.jena.JenaGraph
+import org.openrdf.rio.RDFFormat
+import org.openrdf.model.{Literal,Resource,Statement,URI}
+import org.openrdf.repository.{Repository,RepositoryConnection,RepositoryException,RepositoryResult}
+import org.openrdf.query.TupleQueryResult
 
-case class Head(val vars:List[String])
-case class Result(val `type`:String, val datatype:Option[String], val value:String)
-case class Bindings(val bindings:List[Map[String,Result]])
-case class ResultSet(val head:Head, val results:Bindings) {
-  def columnNames = head.vars
-  def columns = results.bindings
-}
+import org.apache.http.client.HttpClient
+import org.apache.http.conn.ClientConnectionManager
+import org.apache.http.impl.client.DefaultHttpClient
+
+import com.bigdata.gom.gpo.IGPO
+import com.bigdata.gom.om.IObjectManager
+import com.bigdata.gom.om.NanoSparqlObjectManager
+import com.bigdata.rdf.sail.webapp.client.DefaultClientConnectionManagerFactory
+import com.bigdata.rdf.sail.webapp.client.RemoteRepository
+import com.bigdata.rdf.sail.webapp.client.RemoteRepository._
+import com.bigdata.striterator.ICloseableIterator
 
 class Rest(val restUrl:String) {
   val log = Logger(classOf[Rest])
-  val sparqlUrl = url(restUrl) 
-  val http = new Http()
+
+  val executor = Executors.newCachedThreadPool()
+
+  val ccm = DefaultClientConnectionManagerFactory.getInstance()
+                    .newInstance()
+
+  val httpClient = new DefaultHttpClient(ccm)
+
+  val repo = new RemoteRepository(
+                    restUrl, httpClient, executor)
+
+  /*
+  val namespace = "kb";
+
+  val objMgr = new NanoSparqlObjectManager(repo,
+                    namespace)
+  */
 
   val PREFIX_STMT = "PREFIX %s"
-  val INSERT_STMT = """
+  val INSERT_NTRIPLES_STMT = """
   %s
   INSERT DATA
   { 
     %s
   }
   """
+  val INSERT_RDFXML_STMT = """
+  INSERT DATA
+  { 
+    %s
+  }
+  """
 
-  def sparql(query:String):ResultSet = {
-    log.debug("executing query:" + query)
+  def getSubjectDocument(subject:String,prefixes:List[String]):Document = {
+    val queryPrefix = prefixes.map { "PREFIX " + _ } mkString("","\n","\n") 
+    val query = queryPrefix + ("SELECT ?p ?o WHERE { %s ?p ?o }" format subject)
 
-    val result = http(sparqlUrl <:< Map("Accept" -> "application/sparql-results+json") <<? Map("query" -> query)  as_str)
+    log.debug(query)
+    val results = sparql(query)
+    val bindings = results.getBindingNames.asScala
+    log.debug("returned bindings for " + bindings.mkString(","))
     
-    log.debug("query result:" + result)
-    Json.parse[ResultSet](result)
+    val poList = new JLinkedList[PredicateObject]()
+ 
+    while(results.hasNext) {
+      val bindingSet = results.next
+      poList.add(
+	new PredicateObject(
+	  bindingSet.getValue("p").stringValue,
+	  bindingSet.getValue("o").stringValue)
+      )
+    }
+
+    new Document(subject,poList)
   }
 
-  def putGraph(prefixList:List[String],g:Graph):String = {
-    val s = new Serializator( NTriple )
-    val w = new CharArrayWriter
-    s.write(g, w)
-
-    putRdf(prefixList,w.toString)
+  def sparql(query:String):TupleQueryResult = {
+    val pq = repo.prepareTupleQuery(query)
+    pq.evaluate()
   }
 
-  def putRdf(prefixList:List[String],rdf:String):String = {
+/*
+  def resultToString(results:TupleQueryResult):String = {
+    val bindings = results.getBindingNames.asScala
+    log.debug("returned bindings for " + bindings.mkString(","))
+    
+    while(results.hasNext) {
+      val bindingSet = results.next
+      val resMsg =  bindings.map { bindingSet.getValue(_).stringValue }.mkString("result tuple:",",",".")
+      log.debug(resMsg)
+      log.debug("next binding:" + results.next.toString)
+    }
+  }
+*/
+
+  def putFile(filePath:String,format:RDFFormat):Long = {
+    val addFile = new AddOp(new File(filePath),format)
+    val mutationCount = repo.add(addFile)
+    log.debug("added %s records" format mutationCount)
+    mutationCount
+  }
+
+  def putNTriples(prefixList:List[String],rdf:String):String = {
 
     log.debug("inserting rdf:" + rdf)
 
     val prefix = prefixList map { PREFIX_STMT format _ } mkString ("\n")
-    val query = INSERT_STMT format (prefix,rdf)
+    val query = INSERT_NTRIPLES_STMT format (prefix,rdf)
 
-    val result = http(sparqlUrl <:< Map("Accept" -> "application/sparql-results+json") << Map("update" -> query)  as_str)
-
-    log.debug("insert result:" + result)
-    result
+    log.debug("query:" + query)
+    "no result"
   }
 
-  def getDocument(subj:String):Document = {
-      val rest = new Rest("http://localhost:8080/bigdata/sparql")
-      val query = """
-      SELECT ?p ?o WHERE { %s ?p ?o }
-      """
+  def putRDFXML(rdfxml:String):String = {
 
-      val results = rest.sparql(query format subj)
-      new Document(subj,results)
+    log.debug("inserting rdfxml:\n" + rdfxml)
+
+    val query = INSERT_RDFXML_STMT format rdfxml
+
+    "no result"
   }
 
-  def updateDocument(doc:Document, properties:Map[String,String]):Document = {
-    new (doc.subject,properties)
+/*
+  def updateDocument(a1:Document,a2:Document):Boolean = {
+    
   }
+*/
 
   def shutdown = {
-    http.shutdown
+    //http.shutdown
   }
 }
+
+

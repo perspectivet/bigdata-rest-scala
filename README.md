@@ -21,6 +21,6 @@ Or add those to the default options in the sbt launcher script.
 
 Notes:
 
-If you run the tests the RestSpec.scala:"insert an rdf file" test will insert the uniport locations.rdf file (include in src/test/resources) into your bigdata instance.
+If you run the tests the RestSpec.scala:"insert an rdf file" test will insert the uniprot locations.rdf file (include in src/test/resources) into your bigdata instance.
 
 You may have to edit RestSpec to match your test bigdata instance.

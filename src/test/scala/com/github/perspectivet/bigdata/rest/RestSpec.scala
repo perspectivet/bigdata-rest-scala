@@ -2,6 +2,8 @@ package com.github.perspectivet.bigdata.rest
 
 import org.specs2.mutable._
 
+import org.openrdf.model.impl.{StatementImpl,URIImpl}
+
 import org.openrdf.rio.RDFFormat
 
 class RestSpec extends Specification {
@@ -53,8 +55,14 @@ class RestSpec extends Specification {
        success
     }
 
+    "construct and print a URI Resource" in {
+      val subject = new URIImpl("http://purl.uniprot.org/locations/9919")
+      println("subject URI Resource:" + subject.stringValue)
+      success
+    }
+
     "extract a Document for a subject" in {
-      val subject = "<http://purl.uniprot.org/locations/9919>"
+      val subject = new URIImpl("http://purl.uniprot.org/locations/9919")
       val doc = rest.getSubjectDocument(subject,List())
       println("doc:" + doc.toString)
       assert(doc.properties.size() > 0)

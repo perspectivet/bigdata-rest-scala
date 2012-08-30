@@ -4,6 +4,7 @@ import com.codahale.jerkson._
 import dispatch._
 import grizzled.slf4j.Logger
 
+import scala.collection._
 import scala.collection.JavaConverters._
 
 //imported to use the Callable below to folow the bigdata example.
@@ -18,7 +19,8 @@ import java.io.{File,FileReader}
 import java.net.URLEncoder
 
 import org.openrdf.rio.RDFFormat
-import org.openrdf.model.{Literal,Resource,Statement,URI}
+import org.openrdf.model.{Literal,Resource,Statement,URI,Value}
+import org.openrdf.model.impl.{StatementImpl,URIImpl}
 import org.openrdf.repository.{Repository,RepositoryConnection,RepositoryException,RepositoryResult}
 import org.openrdf.query.TupleQueryResult
 
@@ -26,13 +28,11 @@ import org.apache.http.client.HttpClient
 import org.apache.http.conn.ClientConnectionManager
 import org.apache.http.impl.client.DefaultHttpClient
 
-import com.bigdata.gom.gpo.IGPO
-import com.bigdata.gom.om.IObjectManager
-import com.bigdata.gom.om.NanoSparqlObjectManager
 import com.bigdata.rdf.sail.webapp.client.DefaultClientConnectionManagerFactory
 import com.bigdata.rdf.sail.webapp.client.RemoteRepository
 import com.bigdata.rdf.sail.webapp.client.RemoteRepository._
 import com.bigdata.striterator.ICloseableIterator
+import com.bigdata.rdf.sail.webapp.client._
 
 class Rest(val restUrl:String) {
   val log = Logger(classOf[Rest])
@@ -69,9 +69,9 @@ class Rest(val restUrl:String) {
   }
   """
 
-  def getSubjectDocument(subject:String,prefixes:List[String]):Document = {
+  def getSubjectDocument(subject:Resource,prefixes:List[String]):Document = {
     val queryPrefix = prefixes.map { "PREFIX " + _ } mkString("","\n","\n") 
-    val query = queryPrefix + ("SELECT ?p ?o WHERE { %s ?p ?o }" format subject)
+    val query = queryPrefix + ("SELECT ?p ?o WHERE { <%s> ?p ?o }" format subject.stringValue)
 
     log.debug(query)
     val results = sparql(query)
@@ -84,8 +84,8 @@ class Rest(val restUrl:String) {
       val bindingSet = results.next
       poList.add(
 	new PredicateObject(
-	  bindingSet.getValue("p").stringValue,
-	  bindingSet.getValue("o").stringValue)
+	  new URIImpl(bindingSet.getValue("p").stringValue),
+	  bindingSet.getValue("o"))
       )
     }
 
@@ -97,19 +97,33 @@ class Rest(val restUrl:String) {
     pq.evaluate()
   }
 
-/*
+  def bindingToCollection(binding:String,results:TupleQueryResult):Seq[Value] = {
+    if( ! results.getBindingNames.contains(binding)) {
+      Nil
+    } else {
+      val list = mutable.ListBuffer[Value]()
+      while(results.hasNext) {
+	list += results.next.getBinding(binding).getValue
+      }
+
+      list
+    }
+  }
+
   def resultToString(results:TupleQueryResult):String = {
     val bindings = results.getBindingNames.asScala
     log.debug("returned bindings for " + bindings.mkString(","))
-    
+
+    var retString = ""
     while(results.hasNext) {
       val bindingSet = results.next
-      val resMsg =  bindings.map { bindingSet.getValue(_).stringValue }.mkString("result tuple:",",",".")
-      log.debug(resMsg)
-      log.debug("next binding:" + results.next.toString)
+      val resMsg =  bindings.map { b => b + ":" + bindingSet.getValue(b).stringValue }.mkString("\n",",",".")
+      retString = retString + resMsg
     }
+
+    retString
   }
-*/
+
 
   def putFile(filePath:String,format:RDFFormat):Long = {
     val addFile = new AddOp(new File(filePath),format)
@@ -138,11 +152,33 @@ class Rest(val restUrl:String) {
     "no result"
   }
 
-/*
-  def updateDocument(a1:Document,a2:Document):Boolean = {
-    
+  def calcAddOp(a1:Document, a2:Document):Option[AddOp] = {
+    if(a1.subject != a2.subject) {
+      None
+    } else {
+      val preAdd = a2.properties.asScala.toSet
+      val toAdd = preAdd diff a1.properties.asScala.toSet
+      val addList:Set[Statement] = toAdd map { a => 
+	new StatementImpl (a1.subject,
+			   a.pred,
+			   a.obj) }
+      addList.headOption.map { a => new AddOp(addList.asJava) }
+    }
   }
-*/
+
+  def calcRemoveOp(a1:Document, a2:Document):Option[RemoveOp] = {
+    if(a1.subject != a2.subject) {
+      None
+    } else {
+      val preDelete = a1.properties.asScala.toSet
+      val toDelete = preDelete diff a2.properties.asScala.toSet
+      val removeList:Set[Statement] = toDelete map { a => 
+	new StatementImpl (a1.subject,
+			   a.pred,
+			   a.obj) }
+      removeList.headOption.map { a => new RemoveOp(removeList.asJava) }
+    }
+  }
 
   def shutdown = {
     //http.shutdown

@@ -132,6 +132,16 @@ class Rest(val restUrl:String) {
     mutationCount
   }
 
+  def putN3String(rdf:String):Long = {
+    putString(rdf,RDFFormat.N3)
+  }
+  def putString(rdf:String,format:RDFFormat):Long = {
+    val addFile = new AddOp(rdf.getBytes("UTF-8"),format)
+    val mutationCount = repo.add(addFile)
+    log.debug("added %s records" format mutationCount)
+    mutationCount
+  }
+
   def putNTriples(prefixList:List[String],rdf:String):String = {
 
     log.debug("inserting rdf:" + rdf)

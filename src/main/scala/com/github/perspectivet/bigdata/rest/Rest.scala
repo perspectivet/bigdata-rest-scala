@@ -75,20 +75,23 @@ class Rest(val restUrl:String) {
 
     log.debug(query)
     val results = sparql(query)
-    val bindings = results.getBindingNames.asScala
+    getTuplesDocument(results,subject,"p","o")
+  }
+
+  def getTuplesDocument(tuples:TupleQueryResult,subject:Resource,predBinding:String,objBinding:String):Document = {
+    val bindings = tuples.getBindingNames.asScala
     log.debug("returned bindings for " + bindings.mkString(","))
     
     val poList = new JLinkedList[PredicateObject]()
  
-    while(results.hasNext) {
-      val bindingSet = results.next
+    while(tuples.hasNext) {
+      val bindingSet = tuples.next
       poList.add(
 	new PredicateObject(
-	  new URIImpl(bindingSet.getValue("p").stringValue),
-	  bindingSet.getValue("o"))
+	  new URIImpl(bindingSet.getValue(predBinding).stringValue),
+	  bindingSet.getValue(objBinding))
       )
     }
-
     new Document(subject,poList)
   }
 

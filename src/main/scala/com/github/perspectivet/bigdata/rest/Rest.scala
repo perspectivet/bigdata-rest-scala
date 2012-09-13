@@ -68,6 +68,10 @@ class Rest(val restUrl:String) {
     %s
   }
   """
+  def sparql(query:String):TupleQueryResult = {
+    val pq = repo.prepareTupleQuery(query)
+    pq.evaluate()
+  }
 
   def getSubjectDocument(subject:Resource,prefixes:List[String]):Document = {
     val queryPrefix = prefixes.map { "PREFIX " + _ } mkString("","\n","\n") 
@@ -75,63 +79,25 @@ class Rest(val restUrl:String) {
 
     log.debug(query)
     val results = sparql(query)
-    getTuplesDocument(results,subject,"p","o")
+    RDFDocUtils.tuplesToDocument(results,subject,"p","o")
   }
-
-  def getTuplesDocument(tuples:TupleQueryResult,subject:Resource,predBinding:String,objBinding:String):Document = {
-    val bindings = tuples.getBindingNames.asScala
-    log.debug("returned bindings for " + bindings.mkString(","))
-    
-    val poList = new JLinkedList[PredicateObject]()
- 
-    while(tuples.hasNext) {
-      val bindingSet = tuples.next
-      poList.add(
-	new PredicateObject(
-	  new URIImpl(bindingSet.getValue(predBinding).stringValue),
-	  bindingSet.getValue(objBinding))
-      )
-    }
-    new Document(subject,poList)
-  }
-
-  def sparql(query:String):TupleQueryResult = {
-    val pq = repo.prepareTupleQuery(query)
-    pq.evaluate()
-  }
-
-  def bindingToCollection(binding:String,results:TupleQueryResult):Seq[Value] = {
-    if( ! results.getBindingNames.contains(binding)) {
-      Nil
-    } else {
-      val list = mutable.ListBuffer[Value]()
-      while(results.hasNext) {
-	list += results.next.getBinding(binding).getValue
-      }
-
-      list
-    }
-  }
-
-  def resultToString(results:TupleQueryResult):String = {
-    val bindings = results.getBindingNames.asScala
-    log.debug("returned bindings for " + bindings.mkString(","))
-
-    var retString = ""
-    while(results.hasNext) {
-      val bindingSet = results.next
-      val resMsg =  bindings.map { b => b + ":" + bindingSet.getValue(b).stringValue }.mkString("\n",",",".")
-      retString = retString + resMsg
-    }
-
-    retString
-  }
-
 
   def putFile(filePath:String,format:RDFFormat):Long = {
     val addFile = new AddOp(new File(filePath),format)
     val mutationCount = repo.add(addFile)
     log.debug("added %s records" format mutationCount)
+    mutationCount
+  }
+
+  def putAdd(op:AddOp):Long = {
+    val mutationCount = repo.add(op)
+    log.debug("added %s records" format mutationCount)
+    mutationCount
+  }
+
+  def putRemove(op:RemoveOp):Long = {
+    val mutationCount = repo.remove(op)
+    log.debug("removed %s records" format mutationCount)
     mutationCount
   }
 
@@ -163,34 +129,6 @@ class Rest(val restUrl:String) {
     val query = INSERT_RDFXML_STMT format rdfxml
 
     "no result"
-  }
-
-  def calcAddOp(a1:Document, a2:Document):Option[AddOp] = {
-    if(a1.subject != a2.subject) {
-      None
-    } else {
-      val preAdd = a2.properties.asScala.toSet
-      val toAdd = preAdd diff a1.properties.asScala.toSet
-      val addList:Set[Statement] = toAdd map { a => 
-	new StatementImpl (a1.subject,
-			   a.pred,
-			   a.obj) }
-      addList.headOption.map { a => new AddOp(addList.asJava) }
-    }
-  }
-
-  def calcRemoveOp(a1:Document, a2:Document):Option[RemoveOp] = {
-    if(a1.subject != a2.subject) {
-      None
-    } else {
-      val preDelete = a1.properties.asScala.toSet
-      val toDelete = preDelete diff a2.properties.asScala.toSet
-      val removeList:Set[Statement] = toDelete map { a => 
-	new StatementImpl (a1.subject,
-			   a.pred,
-			   a.obj) }
-      removeList.headOption.map { a => new RemoveOp(removeList.asJava) }
-    }
   }
 
   def shutdown = {

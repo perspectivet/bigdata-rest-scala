@@ -20,7 +20,7 @@ libraryDependencies := Seq(
   "net.databinder" %% "dispatch" % "0.8.8",
   "net.databinder" %% "dispatch-http" % "0.8.8",
   "net.databinder" %% "dispatch-core" % "0.8.8",
-  "org.scardf" % "scardf" % "0.6-SNAPSHOT",
+//  "org.scardf" % "scardf" % "0.6-SNAPSHOT",
   "com.codahale" %% "jerkson" % "0.5.0",
   "org.clapper" %% "grizzled-slf4j" % "0.6.9",
   "com.bigdata" % "bigdata" % "1.2.2-SNAPSHOT"

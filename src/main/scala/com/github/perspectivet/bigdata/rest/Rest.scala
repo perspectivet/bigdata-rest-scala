@@ -101,6 +101,12 @@ class Rest(val restUrl:String) {
     mutationCount
   }
 
+  def putUpdate(rop:RemoveOp,aop:AddOp):Long = {
+    val mutationCount = repo.update(rop,aop)
+    log.debug("removed %s records" format mutationCount)
+    mutationCount
+  }
+
   def putN3String(rdf:String):Long = {
     putString(rdf,RDFFormat.N3)
   }
